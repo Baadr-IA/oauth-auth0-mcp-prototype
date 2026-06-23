@@ -54,6 +54,8 @@ If the project is installed as a package, the console script is:
 oauth-auth0-mcp-prototype
 ```
 
+Alpic can also start the repository entrypoint directly from `main.py`.
+
 ## Test
 
 ```bash
