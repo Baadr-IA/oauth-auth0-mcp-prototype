@@ -7,7 +7,7 @@ name = "oauth-auth0-mcp-prototype"
 version = "0.1.0"
 description = "Minimal Auth0 and MCP prototype for Alpic deployment testing"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
