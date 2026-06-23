@@ -48,6 +48,12 @@ For local tests, `AUTH0_JWKS_JSON` can hold a JWKS document directly.
 python server.py --host 127.0.0.1 --port 8000
 ```
 
+If the project is installed as a package, the console script is:
+
+```bash
+oauth-auth0-mcp-prototype
+```
+
 ## Test
 
 ```bash

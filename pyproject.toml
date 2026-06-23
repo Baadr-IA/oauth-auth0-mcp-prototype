@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oauth-auth0-mcp-prototype"
+version = "0.1.0"
+description = "Minimal Auth0 and MCP prototype for Alpic deployment testing"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+oauth-auth0-mcp-prototype = "server:main"
+
+[tool.setuptools]
+py-modules = ["server"]
