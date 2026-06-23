@@ -408,8 +408,8 @@ def run(host: str, port: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Minimal Auth0-protected MCP prototype")
-    parser.add_argument("--host", default=DEFAULT_HOST)
-    parser.add_argument("--port", default=DEFAULT_PORT, type=int)
+    parser.add_argument("--host", default=os.environ.get("HOST", DEFAULT_HOST))
+    parser.add_argument("--port", default=int(os.environ.get("PORT", DEFAULT_PORT)), type=int)
     args = parser.parse_args()
     run(args.host, args.port)
 

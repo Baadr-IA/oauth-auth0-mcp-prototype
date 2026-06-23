@@ -19,6 +19,14 @@ Pour tester ça, je n’ai exposé que la surface la plus simple utile :
 
 Comme ça, je peux prouver que le chemin d’authentification fonctionne avant d’ajouter la persistance ou la logique métier.
 
+## Erreurs de déploiement que j’ai faites
+
+- J’ai d’abord pris le mauvais runtime pour le code existant avant de réaligner le prototype sur le runtime réellement attendu par Alpic.
+- J’ai oublié `pyproject.toml`, ce qui a cassé le build Python avec `No pyproject.toml found`.
+- J’ai oublié `uv.lock`, alors qu’Alpic lance le build Python en mode figé avec `UV_FROZEN=1`.
+- J’ai oublié `main.py`, alors qu’Alpic essayait de démarrer le serveur avec ce point d’entrée.
+- J’ai hardcodé le port `8000` au lieu de lire le port fourni par l’environnement Alpic, ce qui peut empêcher la connexion même si le déploiement est marqué comme réussi.
+
 ## Endpoints
 
 - `GET /health`
