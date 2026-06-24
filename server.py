@@ -424,6 +424,13 @@ class Handler(BaseHTTPRequestHandler):
             claims = self._authenticate()
             request = request_to_json(self)
             response = self.handle_mcp_request(request, claims)
+            if response is None:
+                self.send_response(HTTPStatus.NO_CONTENT)
+                for key, value in self.cors_headers().items():
+                    self.send_header(key, value)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             json_response(self, HTTPStatus.OK, response, headers=self.cors_headers())
         except AuthError as error:
             self._send_auth_error(error)
@@ -466,7 +473,7 @@ class Handler(BaseHTTPRequestHandler):
         if method == "notifications/initialized":
             # The MCP client sends this standard notification after initialize.
             # Treat it as a no-op instead of failing the session handshake.
-            return {"jsonrpc": "2.0", "id": request_id, "result": None}
+            return None
 
         if method == "tools/call":
             if not isinstance(params, dict):

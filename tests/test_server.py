@@ -201,14 +201,17 @@ class ServerTestCase(unittest.TestCase):
 
     def test_mcp_initialized_notification_is_accepted(self) -> None:
         token = self.make_token()
-        status, payload, _ = read_json(
+        request = Request(
             f"{self.base_url}/mcp",
+            data=json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}).encode("utf-8"),
             method="POST",
-            token=token,
-            body={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
         )
-        self.assertEqual(status, HTTPStatus.OK)
-        self.assertEqual(payload, {"jsonrpc": "2.0", "id": None, "result": None})
+        request.add_header("Accept", "application/json")
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Authorization", f"Bearer {token}")
+        with urlopen(request) as response:
+            self.assertEqual(response.status, HTTPStatus.NO_CONTENT)
+            self.assertEqual(response.read(), b"")
 
 
 if __name__ == "__main__":
