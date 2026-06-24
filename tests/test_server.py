@@ -123,10 +123,11 @@ class ServerTestCase(unittest.TestCase):
         }
         cls.old_env = os.environ.copy()
         os.environ["AUTH0_DOMAIN"] = "example.eu.auth0.com"
-        os.environ["AUTH0_AUDIENCE"] = "https://memoire-classification-api"
+        os.environ["AUTH0_AUDIENCE"] = "memoire-classification-api"
         os.environ["AUTH0_ISSUER"] = "https://example.eu.auth0.com/"
         os.environ["AUTH0_JWKS_JSON"] = json.dumps({"keys": [jwk]})
         os.environ["DEFAULT_CABINET_ID"] = "cabinet-a"
+        os.environ["PUBLIC_BASE_URL"] = "http://127.0.0.1:9999"
         os.environ.pop("CABINET_ID_BY_ORG_JSON", None)
         config = build_config()
         cls.server = create_server("127.0.0.1", 0, config)
@@ -146,7 +147,7 @@ class ServerTestCase(unittest.TestCase):
         now = int(time.time())
         claims = {
             "sub": "auth0|user-123",
-            "aud": "https://memoire-classification-api",
+            "aud": "memoire-classification-api",
             "iss": "https://example.eu.auth0.com/",
             "iat": now,
             "exp": now + 300,
@@ -159,6 +160,17 @@ class ServerTestCase(unittest.TestCase):
         status, payload, _ = read_json(f"{self.base_url}/health")
         self.assertEqual(status, HTTPStatus.OK)
         self.assertEqual(payload, {"ok": True})
+
+    def test_oauth_discovery_metadata_is_exposed(self) -> None:
+        status, payload, _ = read_json(f"{self.base_url}/.well-known/oauth-protected-resource")
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(payload["resource"], "http://127.0.0.1:9999")
+        self.assertEqual(payload["authorization_servers"], ["https://example.eu.auth0.com/"])
+
+        status, payload, _ = read_json(f"{self.base_url}/.well-known/oauth-authorization-server")
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(payload["issuer"], "https://example.eu.auth0.com/")
+        self.assertEqual(payload["token_endpoint"], "https://example.eu.auth0.com/oauth/token")
 
     def test_whoami_requires_token(self) -> None:
         status, payload, headers = read_json(f"{self.base_url}/whoami")

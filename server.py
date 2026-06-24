@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
+from urllib.parse import urlparse
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -205,8 +206,10 @@ class AppConfig:
     auth0_issuer: str
     auth0_jwks_url: str | None
     auth0_jwks_json: str | None
+    public_base_url: str | None
     cabinet_id_by_org: dict[str, str]
     default_cabinet_id: str | None
+    cors_allowed_origins: set[str]
     clock_skew_seconds: int = 60
     jwks_cache_ttl: int = 300
     _jwks_cache: tuple[tuple[str | None, str | None], dict[str, Any], float] | None = None
@@ -234,14 +237,21 @@ def build_config() -> AppConfig:
         cabinet_id_by_org = {str(key): str(value) for key, value in loaded.items()}
 
     default_cabinet_id = os.environ.get("DEFAULT_CABINET_ID")
+    cors_allowed_origins = {
+        origin.strip()
+        for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    }
     return AppConfig(
         auth0_domain=auth0_domain,
         auth0_audience=auth0_audience,
         auth0_issuer=auth0_issuer,
         auth0_jwks_url=os.environ.get("AUTH0_JWKS_URL"),
         auth0_jwks_json=os.environ.get("AUTH0_JWKS_JSON"),
+        public_base_url=os.environ.get("PUBLIC_BASE_URL"),
         cabinet_id_by_org=cabinet_id_by_org,
         default_cabinet_id=default_cabinet_id,
+        cors_allowed_origins=cors_allowed_origins,
     )
 
 
@@ -275,6 +285,57 @@ def bearer_challenge(message: str) -> str:
     return f'Bearer realm="{DEFAULT_SERVER_NAME}", error="invalid_token", error_description="{safe}"'
 
 
+def normalize_base_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value.rstrip("/")
+
+
+def current_base_url(handler: BaseHTTPRequestHandler) -> str:
+    configured = normalize_base_url(handler.config.public_base_url)
+    if configured:
+        return configured
+
+    forwarded_proto = handler.headers.get("X-Forwarded-Proto")
+    scheme = forwarded_proto.split(",")[0].strip() if forwarded_proto else "http"
+
+    forwarded_host = handler.headers.get("X-Forwarded-Host")
+    host = forwarded_host.split(",")[0].strip() if forwarded_host else handler.headers.get("Host")
+    if not host:
+        host = f"{handler.server.server_address[0]}:{handler.server.server_address[1]}"
+
+    return f"{scheme}://{host}"
+
+
+def authorization_server_metadata(config: "AppConfig") -> dict[str, Any]:
+    issuer = config.auth0_issuer.rstrip("/") + "/"
+    return {
+        "issuer": issuer,
+        "authorization_endpoint": f"{issuer}authorize",
+        "token_endpoint": f"{issuer}oauth/token",
+        "jwks_uri": f"{issuer}.well-known/jwks.json",
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
+        "subject_types_supported": ["public"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": [
+            "none",
+            "client_secret_basic",
+            "client_secret_post",
+            "private_key_jwt",
+        ],
+    }
+
+
+def protected_resource_metadata(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+    config = handler.config
+    return {
+        "resource": current_base_url(handler),
+        "authorization_servers": [config.auth0_issuer.rstrip("/") + "/"],
+        "bearer_methods_supported": ["header"],
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"{DEFAULT_SERVER_NAME}/{DEFAULT_SERVER_VERSION}"
 
@@ -285,12 +346,32 @@ class Handler(BaseHTTPRequestHandler):
     def config(self) -> AppConfig:
         return self.server.config  # type: ignore[attr-defined]
 
+    def cors_headers(self, preflight: bool = False) -> dict[str, str]:
+        origin = self.headers.get("Origin")
+        if not origin or origin not in self.config.cors_allowed_origins:
+            return {}
+
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Vary": "Origin",
+        }
+        if preflight:
+            headers.update(
+                {
+                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                    "Access-Control-Max-Age": "600",
+                }
+            )
+        return headers
+
     def _authenticate(self) -> dict[str, Any]:
         token = parse_bearer_token(self.headers.get("Authorization"))
         return verify_auth0_jwt(self.config, token)
 
     def _send_auth_error(self, error: AuthError) -> None:
         headers = {"WWW-Authenticate": bearer_challenge(error.message)}
+        headers.update(self.cors_headers())
         json_response(
             self,
             error.status,
@@ -298,31 +379,50 @@ class Handler(BaseHTTPRequestHandler):
             headers=headers,
         )
 
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        headers = self.cors_headers(preflight=True)
+        self.send_response(HTTPStatus.NO_CONTENT)
+        for key, value in headers.items():
+            self.send_header(key, value)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/health":
-            json_response(self, HTTPStatus.OK, {"ok": True})
+        path = urlparse(self.path).path
+
+        if path == "/.well-known/oauth-authorization-server":
+            json_response(self, HTTPStatus.OK, authorization_server_metadata(self.config), headers=self.cors_headers())
             return
 
-        if self.path == "/whoami":
+        if path == "/.well-known/oauth-protected-resource":
+            json_response(self, HTTPStatus.OK, protected_resource_metadata(self), headers=self.cors_headers())
+            return
+
+        if path == "/health":
+            json_response(self, HTTPStatus.OK, {"ok": True}, headers=self.cors_headers())
+            return
+
+        if path == "/whoami":
             try:
                 claims = self._authenticate()
-                json_response(self, HTTPStatus.OK, whoami_payload(self.config, claims))
+                json_response(self, HTTPStatus.OK, whoami_payload(self.config, claims), headers=self.cors_headers())
             except AuthError as error:
                 self._send_auth_error(error)
             return
 
-        json_response(self, HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        json_response(self, HTTPStatus.NOT_FOUND, {"error": "not_found"}, headers=self.cors_headers())
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/mcp":
-            json_response(self, HTTPStatus.NOT_FOUND, {"error": "not_found"})
+        path = urlparse(self.path).path
+        if path != "/mcp":
+            json_response(self, HTTPStatus.NOT_FOUND, {"error": "not_found"}, headers=self.cors_headers())
             return
 
         try:
             claims = self._authenticate()
             request = request_to_json(self)
             response = self.handle_mcp_request(request, claims)
-            json_response(self, HTTPStatus.OK, response)
+            json_response(self, HTTPStatus.OK, response, headers=self.cors_headers())
         except AuthError as error:
             self._send_auth_error(error)
 
@@ -381,7 +481,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:  # noqa: A003
         payload = {"error": message or HTTPStatus(code).phrase.lower()}
-        json_response(self, code, payload)
+        json_response(self, code, payload, headers=self.cors_headers())
 
 
 class AppServer(ThreadingHTTPServer):
