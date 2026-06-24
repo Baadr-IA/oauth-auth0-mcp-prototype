@@ -59,6 +59,8 @@ The server now exposes OAuth discovery metadata at:
 - `/.well-known/oauth-protected-resource`
 - `/.well-known/oauth-authorization-server`
 
+For Alpic DCR proxy discovery, the metadata self-references the deployed MCP public URL as its issuer while still pointing authorization and token endpoints to Auth0.
+
 ## Run
 
 Backend:

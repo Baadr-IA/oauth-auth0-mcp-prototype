@@ -165,11 +165,11 @@ class ServerTestCase(unittest.TestCase):
         status, payload, _ = read_json(f"{self.base_url}/.well-known/oauth-protected-resource")
         self.assertEqual(status, HTTPStatus.OK)
         self.assertEqual(payload["resource"], "http://127.0.0.1:9999")
-        self.assertEqual(payload["authorization_servers"], ["https://example.eu.auth0.com/"])
+        self.assertEqual(payload["authorization_servers"], ["http://127.0.0.1:9999/"])
 
         status, payload, _ = read_json(f"{self.base_url}/.well-known/oauth-authorization-server")
         self.assertEqual(status, HTTPStatus.OK)
-        self.assertEqual(payload["issuer"], "https://example.eu.auth0.com/")
+        self.assertEqual(payload["issuer"], "http://127.0.0.1:9999/")
         self.assertEqual(payload["token_endpoint"], "https://example.eu.auth0.com/oauth/token")
 
     def test_whoami_requires_token(self) -> None:

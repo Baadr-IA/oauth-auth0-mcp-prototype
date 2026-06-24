@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auth0 PKCE Token Helper</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #0b1220;
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #e5eefc;
+      --muted: #a8b3c7;
+      --accent: #7c3aed;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(124, 58, 237, 0.3), transparent 30%),
+        radial-gradient(circle at top right, rgba(34, 197, 94, 0.18), transparent 24%),
+        linear-gradient(180deg, #08101d 0%, #0f172a 100%);
+      color: var(--text);
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 20px;
+      align-items: stretch;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .hero-copy {
+      padding: 28px;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      line-height: 1.1;
+    }
+
+    h1 {
+      font-size: clamp(30px, 4vw, 54px);
+      letter-spacing: -0.04em;
+      margin-bottom: 12px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .badge {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .badge strong {
+      color: #ffffff;
+    }
+
+    .sidebar {
+      padding: 22px;
+    }
+
+    .sidebar h3 {
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin: 14px 0 8px;
+      color: #f3f6fb;
+    }
+
+    input, textarea, button {
+      font: inherit;
+    }
+
+    input, textarea {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(3, 7, 18, 0.7);
+      color: var(--text);
+      padding: 14px 16px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 170px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+
+    input:focus, textarea:focus {
+      border-color: rgba(124, 58, 237, 0.8);
+      box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.18);
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+    .primary { background: linear-gradient(135deg, #7c3aed, #22c55e); color: white; }
+    .secondary { background: rgba(255, 255, 255, 0.08); color: var(--text); border: 1px solid var(--border); }
+    .danger { background: rgba(239, 68, 68, 0.16); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    .panel h2 {
+      font-size: 20px;
+      margin-bottom: 14px;
+    }
+
+    .small {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #e5eefc;
+      background: rgba(3, 7, 18, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px;
+      min-height: 120px;
+    }
+
+    .status {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--warning);
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+    }
+
+    .dot.ok { background: var(--accent-2); box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18); }
+    .dot.bad { background: var(--danger); box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18); }
+
+    @media (max-width: 900px) {
+      .hero, .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="card hero-copy">
+        <h1>Auth0 PKCE Token Helper</h1>
+        <p>
+          Use this local page to sign in with Auth0, recover a real access token, and optionally test
+          your <code>/whoami</code> endpoint against the prototype backend.
+        </p>
+        <div class="badges">
+          <div class="badge"><strong>Redirect URI:</strong> <span id="redirectUriText"></span></div>
+          <div class="badge"><strong>Audience:</strong> <span id="audienceText"></span></div>
+          <div class="badge"><strong>Backend:</strong> <span id="backendText"></span></div>
+        </div>
+        <div class="status" id="statusLine">
+          <span class="dot" id="statusDot"></span>
+          <span id="statusText">Ready.</span>
+        </div>
+      </div>
+
+      <div class="card sidebar">
+        <h3>Login settings</h3>
+        <label for="organization">Organization (optional)</label>
+        <input id="organization" placeholder="Leave blank for now, or paste org_xxx">
+        <div class="row">
+          <button class="primary" id="loginBtn">Login with Auth0</button>
+          <button class="secondary" id="logoutBtn">Logout</button>
+          <button class="danger" id="clearBtn">Clear local state</button>
+        </div>
+        <p class="small">
+          If you want <code>org_id</code> in the token, enter the organization value that Auth0 expects for this login.
+        </p>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card panel">
+        <h2>Access token</h2>
+        <textarea id="tokenBox" readonly placeholder="Login first to see the access token here."></textarea>
+        <div class="row">
+          <button class="secondary" id="copyBtn">Copy token</button>
+          <button class="secondary" id="decodeBtn">Refresh claims</button>
+        </div>
+        <p class="small">The token is stored only in sessionStorage in this browser tab.</p>
+      </div>
+
+      <div class="card panel">
+        <h2>Token claims</h2>
+        <pre id="claimsBox">{}</pre>
+      </div>
+
+      <div class="card panel">
+        <h2>Backend check</h2>
+        <div class="row">
+          <button class="primary" id="whoamiBtn">Call /whoami</button>
+        </div>
+        <pre id="backendBox">Waiting for a token.</pre>
+        <p class="small">
+          This button works if your backend allows CORS from <code>http://127.0.0.1:3000</code>. If not, copy the token
+          and test <code>/whoami</code> from PowerShell.
+        </p>
+      </div>
+
+      <div class="card panel">
+        <h2>Callback and errors</h2>
+        <pre id="logBox">No errors yet.</pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const CONFIG = {
+      domain: "dev-v4m6lbgizxmu1vhc.us.auth0.com",
+      clientId: "SmXdzW9UfYVtQCIpvwwF4DAMGMhg0fpM",
+      audience: "memoire-classification-api",
+      redirectUri: "http://127.0.0.1:3000/callback",
+      logoutReturnTo: "http://127.0.0.1:3000/",
+      backendUrl: "http://127.0.0.1:8000/whoami",
+      scope: "openid profile email"
+    };
+
+    const STORAGE = {
+      verifier: "auth0.pkce_verifier",
+      state: "auth0.pkce_state",
+      token: "auth0.access_token",
+      claims: "auth0.claims",
+    };
+
+    const el = (id) => document.getElementById(id);
+
+    const statusDot = el("statusDot");
+    const statusText = el("statusText");
+    const logBox = el("logBox");
+    const tokenBox = el("tokenBox");
+    const claimsBox = el("claimsBox");
+    const backendBox = el("backendBox");
+
+    el("redirectUriText").textContent = CONFIG.redirectUri;
+    el("audienceText").textContent = CONFIG.audience;
+    el("backendText").textContent = CONFIG.backendUrl;
+    el("organization").value = "";
+
+    function setStatus(message, kind = "warn") {
+      statusText.textContent = message;
+      statusDot.className = "dot" + (kind === "ok" ? " ok" : kind === "bad" ? " bad" : "");
+    }
+
+    function log(message) {
+      logBox.textContent = message;
+    }
+
+    function loadSavedToken() {
+      const token = sessionStorage.getItem(STORAGE.token) || "";
+      tokenBox.value = token;
+      if (token) {
+        try {
+          const claims = decodeJwt(token);
+          sessionStorage.setItem(STORAGE.claims, JSON.stringify(claims, null, 2));
+          claimsBox.textContent = JSON.stringify(claims, null, 2);
+        } catch (error) {
+          claimsBox.textContent = JSON.stringify({ error: error.message }, null, 2);
+        }
+      } else {
+        claimsBox.textContent = "{}";
+      }
+    }
+
+    function base64UrlEncode(bytes) {
+      let binary = "";
+      for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+      }
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    }
+
+    function randomBase64Url(length = 32) {
+      const bytes = new Uint8Array(length);
+      crypto.getRandomValues(bytes);
+      return base64UrlEncode(bytes);
+    }
+
+    async function sha256Base64Url(value) {
+      const data = new TextEncoder().encode(value);
+      const digest = await crypto.subtle.digest("SHA-256", data);
+      return base64UrlEncode(new Uint8Array(digest));
+    }
+
+    function decodeJwt(token) {
+      const parts = token.split(".");
+      if (parts.length !== 3) {
+        throw new Error("Not a JWT");
+      }
+      const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = payload + "=".repeat((4 - payload.length % 4) % 4);
+      return JSON.parse(atob(padded));
+    }
+
+    function buildAuthorizeUrl(state, codeChallenge) {
+      const url = new URL(`https://${CONFIG.domain}/authorize`);
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("client_id", CONFIG.clientId);
+      url.searchParams.set("redirect_uri", CONFIG.redirectUri);
+      url.searchParams.set("scope", CONFIG.scope);
+      url.searchParams.set("audience", CONFIG.audience);
+      url.searchParams.set("state", state);
+      url.searchParams.set("code_challenge", codeChallenge);
+      url.searchParams.set("code_challenge_method", "S256");
+
+      const organization = el("organization").value.trim();
+      if (organization) {
+        url.searchParams.set("organization", organization);
+      }
+
+      return url.toString();
+    }
+
+    async function startLogin() {
+      const verifier = randomBase64Url(64);
+      const state = randomBase64Url(24);
+      const challenge = await sha256Base64Url(verifier);
+
+      sessionStorage.setItem(STORAGE.verifier, verifier);
+      sessionStorage.setItem(STORAGE.state, state);
+
+      setStatus("Redirecting to Auth0...", "warn");
+      location.assign(buildAuthorizeUrl(state, challenge));
+    }
+
+    async function exchangeCodeForToken(code, state) {
+      const expectedState = sessionStorage.getItem(STORAGE.state);
+      const verifier = sessionStorage.getItem(STORAGE.verifier);
+      if (!expectedState || !verifier) {
+        throw new Error("Missing stored PKCE verifier/state. Start login again.");
+      }
+      if (state !== expectedState) {
+        throw new Error("State mismatch. Start login again.");
+      }
+
+      const response = await fetch(`https://${CONFIG.domain}/oauth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: CONFIG.clientId,
+          code_verifier: verifier,
+          code,
+          redirect_uri: CONFIG.redirectUri
+        })
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error_description || payload.error || "Token exchange failed");
+      }
+
+      if (!payload.access_token) {
+        throw new Error("No access_token returned by Auth0");
+      }
+
+      sessionStorage.setItem(STORAGE.token, payload.access_token);
+      if (payload.id_token) {
+        sessionStorage.setItem("auth0.id_token", payload.id_token);
+      }
+      loadSavedToken();
+      setStatus("Token received.", "ok");
+      log("Auth0 token exchange succeeded.");
+      cleanupCallbackQuery();
+    }
+
+    function cleanupCallbackQuery() {
+      const cleanUrl = new URL(location.href);
+      cleanUrl.search = "";
+      history.replaceState({}, document.title, cleanUrl.toString());
+    }
+
+    async function handleCallbackIfPresent() {
+      const url = new URL(location.href);
+      const error = url.searchParams.get("error");
+      if (error) {
+        const description = url.searchParams.get("error_description") || error;
+        setStatus("Auth0 returned an error.", "bad");
+        log(`${error}: ${description}`);
+        return;
+      }
+
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      if (!code) {
+        return;
+      }
+
+      setStatus("Exchanging code for tokens...", "warn");
+      try {
+        await exchangeCodeForToken(code, state);
+      } catch (error) {
+        setStatus("Token exchange failed.", "bad");
+        log(error.message);
+      }
+    }
+
+    async function copyToken() {
+      const token = tokenBox.value.trim();
+      if (!token) {
+        throw new Error("No token to copy yet.");
+      }
+      await navigator.clipboard.writeText(token);
+      setStatus("Token copied to clipboard.", "ok");
+    }
+
+    async function callBackend() {
+      const token = tokenBox.value.trim();
+      if (!token) {
+        throw new Error("No token available. Login first.");
+      }
+
+      backendBox.textContent = "Calling backend...";
+      const response = await fetch(CONFIG.backendUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const text = await response.text();
+      let parsed = text;
+      try {
+        parsed = JSON.stringify(JSON.parse(text), null, 2);
+      } catch (error) {
+        // keep raw text
+      }
+
+      backendBox.textContent = `HTTP ${response.status}\n\n${parsed}`;
+      if (response.ok) {
+        setStatus("Backend accepted the token.", "ok");
+      } else {
+        setStatus("Backend rejected the token.", "bad");
+      }
+    }
+
+    function clearLocalState() {
+      Object.values(STORAGE).forEach((key) => sessionStorage.removeItem(key));
+      sessionStorage.removeItem("auth0.id_token");
+      el("organization").value = "";
+      tokenBox.value = "";
+      claimsBox.textContent = "{}";
+      backendBox.textContent = "Waiting for a token.";
+      log("Local state cleared.");
+      setStatus("State cleared.", "ok");
+    }
+
+    function logout() {
+      clearLocalState();
+      const url = new URL(`https://${CONFIG.domain}/v2/logout`);
+      url.searchParams.set("client_id", CONFIG.clientId);
+      url.searchParams.set("returnTo", CONFIG.logoutReturnTo);
+      setStatus("Redirecting to Auth0 logout...", "warn");
+      location.assign(url.toString());
+    }
+
+    function refreshClaims() {
+      const token = tokenBox.value.trim();
+      if (!token) {
+        claimsBox.textContent = "{}";
+        return;
+      }
+      try {
+        const claims = decodeJwt(token);
+        sessionStorage.setItem(STORAGE.claims, JSON.stringify(claims, null, 2));
+        claimsBox.textContent = JSON.stringify(claims, null, 2);
+        setStatus("Claims decoded.", "ok");
+      } catch (error) {
+        claimsBox.textContent = JSON.stringify({ error: error.message }, null, 2);
+        setStatus("Could not decode token.", "bad");
+      }
+    }
+
+    el("loginBtn").addEventListener("click", (event) => {
+      event.preventDefault();
+      startLogin().catch((error) => {
+        setStatus("Login failed.", "bad");
+        log(error.message);
+      });
+    });
+
+    el("logoutBtn").addEventListener("click", (event) => {
+      event.preventDefault();
+      logout();
+    });
+
+    el("clearBtn").addEventListener("click", (event) => {
+      event.preventDefault();
+      clearLocalState();
+    });
+
+    el("copyBtn").addEventListener("click", (event) => {
+      event.preventDefault();
+      copyToken().catch((error) => {
+        setStatus("Copy failed.", "bad");
+        log(error.message);
+      });
+    });
+
+    el("decodeBtn").addEventListener("click", (event) => {
+      event.preventDefault();
+      refreshClaims();
+    });
+
+    el("whoamiBtn").addEventListener("click", (event) => {
+      event.preventDefault();
+      callBackend().catch((error) => {
+        backendBox.textContent = error.message;
+        setStatus("Backend call failed.", "bad");
+      });
+    });
+
+    loadSavedToken();
+    handleCallbackIfPresent().finally(() => {
+      const storedToken = sessionStorage.getItem(STORAGE.token);
+      if (storedToken) {
+        setStatus("Token ready.", "ok");
+      } else if (!new URL(location.href).searchParams.get("code")) {
+        setStatus("Ready.", "warn");
+      }
+    });
+  </script>
+</body>
+</html>

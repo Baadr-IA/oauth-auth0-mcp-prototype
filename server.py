@@ -307,13 +307,15 @@ def current_base_url(handler: BaseHTTPRequestHandler) -> str:
     return f"{scheme}://{host}"
 
 
-def authorization_server_metadata(config: "AppConfig") -> dict[str, Any]:
-    issuer = config.auth0_issuer.rstrip("/") + "/"
+def authorization_server_metadata(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+    config = handler.config
+    auth0_issuer = config.auth0_issuer.rstrip("/") + "/"
+    issuer = current_base_url(handler).rstrip("/") + "/"
     return {
         "issuer": issuer,
-        "authorization_endpoint": f"{issuer}authorize",
-        "token_endpoint": f"{issuer}oauth/token",
-        "jwks_uri": f"{issuer}.well-known/jwks.json",
+        "authorization_endpoint": f"{auth0_issuer}authorize",
+        "token_endpoint": f"{auth0_issuer}oauth/token",
+        "jwks_uri": config.auth0_jwks_url or f"{auth0_issuer}.well-known/jwks.json",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
         "subject_types_supported": ["public"],
@@ -328,10 +330,10 @@ def authorization_server_metadata(config: "AppConfig") -> dict[str, Any]:
 
 
 def protected_resource_metadata(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
-    config = handler.config
+    issuer = current_base_url(handler).rstrip("/") + "/"
     return {
         "resource": current_base_url(handler),
-        "authorization_servers": [config.auth0_issuer.rstrip("/") + "/"],
+        "authorization_servers": [issuer],
         "bearer_methods_supported": ["header"],
     }
 
@@ -391,7 +393,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         if path == "/.well-known/oauth-authorization-server":
-            json_response(self, HTTPStatus.OK, authorization_server_metadata(self.config), headers=self.cors_headers())
+            json_response(self, HTTPStatus.OK, authorization_server_metadata(self), headers=self.cors_headers())
             return
 
         if path == "/.well-known/oauth-protected-resource":
