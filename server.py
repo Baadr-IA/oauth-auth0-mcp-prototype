@@ -463,6 +463,11 @@ class Handler(BaseHTTPRequestHandler):
             }
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
+        if method == "notifications/initialized":
+            # The MCP client sends this standard notification after initialize.
+            # Treat it as a no-op instead of failing the session handshake.
+            return {"jsonrpc": "2.0", "id": request_id, "result": None}
+
         if method == "tools/call":
             if not isinstance(params, dict):
                 raise AuthError(HTTPStatus.BAD_REQUEST, "invalid tools/call params", error="invalid_request")

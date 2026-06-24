@@ -199,6 +199,17 @@ class ServerTestCase(unittest.TestCase):
         self.assertEqual(payload["result"]["structuredContent"]["cabinet_id"], "cabinet-a")
         self.assertEqual(payload["result"]["structuredContent"]["org_id"], "org_123")
 
+    def test_mcp_initialized_notification_is_accepted(self) -> None:
+        token = self.make_token()
+        status, payload, _ = read_json(
+            f"{self.base_url}/mcp",
+            method="POST",
+            token=token,
+            body={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        )
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(payload, {"jsonrpc": "2.0", "id": None, "result": None})
+
 
 if __name__ == "__main__":
     unittest.main()
