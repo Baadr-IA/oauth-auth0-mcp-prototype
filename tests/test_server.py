@@ -192,6 +192,17 @@ class ServerTestCase(unittest.TestCase):
         self.assertIn("resource_metadata", headers["WWW-Authenticate"])
         self.assertIn("/.well-known/oauth-protected-resource", headers["WWW-Authenticate"])
 
+    def test_root_mcp_requires_token_exposes_resource_metadata(self) -> None:
+        status, payload, headers = read_json(
+            f"{self.base_url}/",
+            method="POST",
+            body={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        )
+        self.assertEqual(status, HTTPStatus.UNAUTHORIZED)
+        self.assertEqual(payload["error"], "invalid_token")
+        self.assertIn("WWW-Authenticate", headers)
+        self.assertIn("resource_metadata", headers["WWW-Authenticate"])
+
     def test_whoami_accepts_valid_auth0_token(self) -> None:
         token = self.make_token()
         status, payload, _ = read_json(f"{self.base_url}/whoami", token=token)
@@ -205,6 +216,18 @@ class ServerTestCase(unittest.TestCase):
         token = self.make_token()
         status, payload, _ = read_json(
             f"{self.base_url}/mcp",
+            method="POST",
+            token=token,
+            body={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "whoami", "arguments": {}}},
+        )
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(payload["result"]["structuredContent"]["cabinet_id"], "cabinet-a")
+        self.assertEqual(payload["result"]["structuredContent"]["org_id"], "org_123")
+
+    def test_root_mcp_tool_returns_same_identity(self) -> None:
+        token = self.make_token()
+        status, payload, _ = read_json(
+            f"{self.base_url}/",
             method="POST",
             token=token,
             body={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "whoami", "arguments": {}}},

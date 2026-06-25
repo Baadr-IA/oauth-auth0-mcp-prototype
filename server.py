@@ -419,7 +419,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path != "/mcp":
+        if path not in {"", "/", "/mcp"}:
             json_response(self, HTTPStatus.NOT_FOUND, {"error": "not_found"}, headers=self.cors_headers())
             return
 
