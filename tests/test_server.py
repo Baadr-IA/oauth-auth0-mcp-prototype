@@ -171,6 +171,7 @@ class ServerTestCase(unittest.TestCase):
         self.assertEqual(status, HTTPStatus.OK)
         self.assertEqual(payload["issuer"], "http://127.0.0.1:9999/")
         self.assertEqual(payload["token_endpoint"], "https://example.eu.auth0.com/oauth/token")
+        self.assertEqual(payload["grant_types_supported"], ["authorization_code", "refresh_token"])
 
     def test_whoami_requires_token(self) -> None:
         status, payload, headers = read_json(f"{self.base_url}/whoami")

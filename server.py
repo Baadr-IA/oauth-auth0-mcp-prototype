@@ -317,7 +317,7 @@ def authorization_server_metadata(handler: BaseHTTPRequestHandler) -> dict[str, 
         "token_endpoint": f"{auth0_issuer}oauth/token",
         "jwks_uri": config.auth0_jwks_url or f"{auth0_issuer}.well-known/jwks.json",
         "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
         "subject_types_supported": ["public"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": [
