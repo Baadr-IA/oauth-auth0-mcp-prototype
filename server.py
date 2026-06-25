@@ -372,7 +372,10 @@ class Handler(BaseHTTPRequestHandler):
         return verify_auth0_jwt(self.config, token)
 
     def _send_auth_error(self, error: AuthError) -> None:
-        headers = {"WWW-Authenticate": bearer_challenge(error.message)}
+        resource_metadata = f'{current_base_url(self).rstrip("/")}/.well-known/oauth-protected-resource'
+        headers = {
+            "WWW-Authenticate": f'{bearer_challenge(error.message)}, resource_metadata="{resource_metadata}"'
+        }
         headers.update(self.cors_headers())
         json_response(
             self,
