@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
-from urllib.parse import urlparse
 from urllib.error import URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
@@ -20,6 +20,7 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 DEFAULT_SERVER_NAME = "memoire-classification-api"
 DEFAULT_SERVER_VERSION = "0.1.0"
+PUBLIC_MCP_METHODS = {"initialize", "notifications/initialized", "tools/list"}
 
 
 class AuthError(Exception):
@@ -384,6 +385,11 @@ class Handler(BaseHTTPRequestHandler):
             headers=headers,
         )
 
+    def _mcp_claims_for_method(self, method: str | None) -> dict[str, Any] | None:
+        if method in PUBLIC_MCP_METHODS:
+            return None
+        return self._authenticate()
+
     def do_OPTIONS(self) -> None:  # noqa: N802
         headers = self.cors_headers(preflight=True)
         self.send_response(HTTPStatus.NO_CONTENT)
@@ -424,8 +430,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
-            claims = self._authenticate()
             request = request_to_json(self)
+            method = request.get("method") if isinstance(request, dict) else None
+            claims = self._mcp_claims_for_method(method)
             response = self.handle_mcp_request(request, claims)
             if response is None:
                 self.send_response(HTTPStatus.NO_CONTENT)
@@ -438,7 +445,7 @@ class Handler(BaseHTTPRequestHandler):
         except AuthError as error:
             self._send_auth_error(error)
 
-    def handle_mcp_request(self, request: Any, claims: dict[str, Any]) -> dict[str, Any]:
+    def handle_mcp_request(self, request: Any, claims: dict[str, Any] | None) -> dict[str, Any] | None:
         if not isinstance(request, dict):
             raise AuthError(HTTPStatus.BAD_REQUEST, "json-rpc request must be an object", error="invalid_request")
 
@@ -474,11 +481,11 @@ class Handler(BaseHTTPRequestHandler):
             return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
         if method == "notifications/initialized":
-            # The MCP client sends this standard notification after initialize.
-            # Treat it as a no-op instead of failing the session handshake.
             return None
 
         if method == "tools/call":
+            if claims is None:
+                raise AuthError(HTTPStatus.UNAUTHORIZED, "missing bearer token")
             if not isinstance(params, dict):
                 raise AuthError(HTTPStatus.BAD_REQUEST, "invalid tools/call params", error="invalid_request")
             if params.get("name") != "whoami":

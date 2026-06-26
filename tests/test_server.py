@@ -126,9 +126,9 @@ class ServerTestCase(unittest.TestCase):
         os.environ["AUTH0_AUDIENCE"] = "memoire-classification-api"
         os.environ["AUTH0_ISSUER"] = "https://example.eu.auth0.com/"
         os.environ["AUTH0_JWKS_JSON"] = json.dumps({"keys": [jwk]})
-        os.environ["DEFAULT_CABINET_ID"] = "cabinet-a"
+        os.environ["CABINET_ID_BY_ORG_JSON"] = json.dumps({"org_123": "cabinet-a"})
         os.environ["PUBLIC_BASE_URL"] = "http://127.0.0.1:9999"
-        os.environ.pop("CABINET_ID_BY_ORG_JSON", None)
+        os.environ.pop("DEFAULT_CABINET_ID", None)
         config = build_config()
         cls.server = create_server("127.0.0.1", 0, config)
         cls.port = cls.server.server_address[1]
@@ -143,7 +143,7 @@ class ServerTestCase(unittest.TestCase):
         os.environ.clear()
         os.environ.update(cls.old_env)
 
-    def make_token(self) -> str:
+    def make_token(self, include_org_name: bool = False) -> str:
         now = int(time.time())
         claims = {
             "sub": "auth0|user-123",
@@ -152,8 +152,9 @@ class ServerTestCase(unittest.TestCase):
             "iat": now,
             "exp": now + 300,
             "org_id": "org_123",
-            "org_name": "cabinet-a",
         }
+        if include_org_name:
+            claims["org_name"] = "cabinet-a"
         return make_jwt(self.private_key, self.kid, claims)
 
     def test_health_is_public(self) -> None:
@@ -180,30 +181,47 @@ class ServerTestCase(unittest.TestCase):
         self.assertIn("WWW-Authenticate", headers)
         self.assertIn("resource_metadata", headers["WWW-Authenticate"])
 
-    def test_mcp_requires_token_exposes_resource_metadata(self) -> None:
-        status, payload, headers = read_json(
+    def test_mcp_initialize_is_public(self) -> None:
+        status, payload, _ = read_json(
+            f"{self.base_url}/mcp",
+            method="POST",
+            body={"jsonrpc": "2.0", "id": 1, "method": "initialize"},
+        )
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(payload["result"]["serverInfo"]["name"], "memoire-classification-api")
+
+    def test_mcp_tools_list_is_public(self) -> None:
+        status, payload, _ = read_json(
             f"{self.base_url}/mcp",
             method="POST",
             body={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
         )
+        self.assertEqual(status, HTTPStatus.OK)
+        self.assertEqual(payload["result"]["tools"][0]["name"], "whoami")
+
+    def test_mcp_tool_call_requires_token(self) -> None:
+        status, payload, headers = read_json(
+            f"{self.base_url}/mcp",
+            method="POST",
+            body={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "whoami", "arguments": {}}},
+        )
         self.assertEqual(status, HTTPStatus.UNAUTHORIZED)
         self.assertEqual(payload["error"], "invalid_token")
         self.assertIn("WWW-Authenticate", headers)
-        self.assertIn("resource_metadata", headers["WWW-Authenticate"])
         self.assertIn("/.well-known/oauth-protected-resource", headers["WWW-Authenticate"])
 
-    def test_root_mcp_requires_token_exposes_resource_metadata(self) -> None:
+    def test_root_mcp_tool_call_requires_token(self) -> None:
         status, payload, headers = read_json(
             f"{self.base_url}/",
             method="POST",
-            body={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+            body={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "whoami", "arguments": {}}},
         )
         self.assertEqual(status, HTTPStatus.UNAUTHORIZED)
         self.assertEqual(payload["error"], "invalid_token")
         self.assertIn("WWW-Authenticate", headers)
         self.assertIn("resource_metadata", headers["WWW-Authenticate"])
 
-    def test_whoami_accepts_valid_auth0_token(self) -> None:
+    def test_whoami_accepts_valid_auth0_token_using_org_mapping(self) -> None:
         token = self.make_token()
         status, payload, _ = read_json(f"{self.base_url}/whoami", token=token)
         self.assertEqual(status, HTTPStatus.OK)
@@ -236,8 +254,7 @@ class ServerTestCase(unittest.TestCase):
         self.assertEqual(payload["result"]["structuredContent"]["cabinet_id"], "cabinet-a")
         self.assertEqual(payload["result"]["structuredContent"]["org_id"], "org_123")
 
-    def test_mcp_initialized_notification_is_accepted(self) -> None:
-        token = self.make_token()
+    def test_mcp_initialized_notification_is_accepted_without_token(self) -> None:
         request = Request(
             f"{self.base_url}/mcp",
             data=json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}).encode("utf-8"),
@@ -245,7 +262,6 @@ class ServerTestCase(unittest.TestCase):
         )
         request.add_header("Accept", "application/json")
         request.add_header("Content-Type", "application/json")
-        request.add_header("Authorization", f"Bearer {token}")
         with urlopen(request) as response:
             self.assertEqual(response.status, HTTPStatus.NO_CONTENT)
             self.assertEqual(response.read(), b"")
